@@ -176,9 +176,8 @@ void readVals(){
       setExternal(0,0,0);
       delay(200);
 
+      changed = changed | vals[incoming/10 - 6] != incoming%10;
       vals[incoming/10 - 6] = incoming%10;
-      
-      changed = true;
     }
 
     if(changed)
