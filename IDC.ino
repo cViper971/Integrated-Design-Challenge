@@ -28,6 +28,7 @@ SoftwareSerial LCD = SoftwareSerial(255, TxPin);
 //variable used to track hash count
 int hashCount;
 int score;
+int finalReads;
 int vals[5] = { -1, -1, -1, -1, -1 };
 
 boolean finished = false;
@@ -61,7 +62,6 @@ void setup() {
   therm.begin();
   therm.setUnit(TEMP_F);
 
-
   //define variables to keep track of score and hash counts
   hashCount = 0;
   score = 0;
@@ -75,69 +75,79 @@ void setup() {
 }
 
 void loop() {
-  if(!finished){
-    //get QTI readings
-    int state = getState();
+  if(finished){
+    updateVals();
+    return;
+  }
 
-    //make decision based on state reading from QTIs
-    switch (state) {
-      case 0:
-        stop();
-        break;
-      case 1:
-        turnRight();
-        break;
-      case 2:
-        forward();
-        break;
-      case 3:
-        turnRight();
-        break;
-      case 4:
-        turnLeft();
-        break;
-      case 5:
-        //not possible
-        stop();
-        break;
-      case 6:
-        turnLeft();
-        break;
-      case 7:
-        handleHash();
-        break;
-    }
-  }else{
-    readVals();
-    delay(100);
+  //get QTI readings
+  int state = getState();
 
-    boolean complete = true;
-    boolean same = true;
-    int sum = 0;
-    for (int i=0;i<5;i++){
-      if (vals[i] == -1)
-        complete = false;
-      if(vals[i]!=vals[0])
-        same = false;
-      sum += vals[i];
+  //make decision based on state reading from QTIs
+  switch (state) {
+    case 0:
+      stop();
+      break;
+    case 1:
+      turnRight();
+      break;
+    case 2:
+      forward();
+      break;
+    case 3:
+      turnRight();
+      break;
+    case 4:
+      turnLeft();
+      break;
+    case 5:
+      //not possible
+      stop();
+      break;
+    case 6:
+      turnLeft();
+      break;
+    case 7:
+      handleHash();
+      break;
+  }
+}
+
+void updateVals(){
+  readVals();
+  finalReads++;
+  delay(100);
+
+  boolean complete = true;
+  boolean same = true;
+  int sum = 0;
+  for (int i=0;i<5;i++){
+    if (vals[i] == -1)
+      complete = false;
+    if(vals[i]!=vals[0])
+      same = false;
+    sum += vals[i] == -1 ? 1 : vals[i];
+  }
+
+  if (complete || finalReads > 100) {
+    if(same){
+      Serial2.print(char(21));
+      delay(2000);
+      sing();
+    }else if(sum<5){
+      Serial2.print(char(22));
+      delay(2000);
+      lightShow();
+    }else{
+      Serial2.print(char(23));
+      delay(2000);
+      dance();
     }
 
-    int res = 0;
-    if (complete) {
-      if(same){
-        Serial2.print(char(21));
-        sing();
-      }else if(sum<5){
-        Serial2.print(char(22));
-        lightShow();
-      }else{
-        Serial2.print(char(23));
-        dance()
-      }
-      while(true){
-        delay(1);
-      }
-    }
+    servoLeft.detach();
+    servoRight.detach();
+    while(true)
+      delay(1);
   }
 }
 
@@ -209,18 +219,18 @@ void dance(){
 
 void sing(){
   for(long k = 0; k < num_sw; k++){
-    mySerial.write(durs_sw[k]);
-    mySerial.write(octs_sw[k]);
-    mySerial.write(note_sw[k]);
+    LCD.write(durs_sw[k]);
+    LCD.write(octs_sw[k]);
+    LCD.write(note_sw[k]);
     int len = 214 - durs_sw[k];
     float del = 2000 / pow(2, len);
     delay(int(del*1.1));
   }
 
   for(long k = 0; k < num_im; k++){
-    mySerial.write(durs_im[k]);
-    mySerial.write(octs_im[k]);
-    mySerial.write(note_im[k]);
+    LCD.write(durs_im[k]);
+    LCD.write(octs_im[k]);
+    LCD.write(note_im[k]);
     int len = 214 - durs_im[k];
     float del = 2000 / pow(2, len);
     delay(int(del*1.1));
@@ -228,7 +238,31 @@ void sing(){
 }
 
 void lightShow(){
+  int counter = 3;
+  //exteral led flickers white and then blue and on-board does the opposite 
+  for (int k = 1; k<8; k++){
+    setExternal(255,255,255);
+    setLED(0,0,255);
+    delay(5000/counter); 
 
+    setExternal(0,0,255);
+    setExternal(255,255,255);
+    delay(5000/counter);
+
+    counter = 2*counter; 
+  }
+
+  for (int j = 1; j<9; j++){
+    //turn external led purple + board led yellow
+    setExternal(255,0,255);
+    setLED(255,255,0);
+    delay(125);
+
+    //turn both leds off 
+    setExternal(0,0,0);
+    setLED(0,0,0);
+    delay(125);
+  }
 }
 
 void handleHash() {
@@ -254,9 +288,6 @@ void handleHash() {
     setExternal(0, 0, 255);
     delay(250);
     setExternal(0, 0, 0);
-
-    servoLeft.detach();
-    servoRight.detach();
 
     rerender();
   }
@@ -286,8 +317,7 @@ boolean qtiState(int pin) {
   pinMode(pin, INPUT);      // Sets pin as INPUT
   digitalWrite(pin, LOW);   // Pin LOW
   long time = micros();     // Tracks starting time
-  while (digitalRead(pin))
-    ;                      // Loops while voltage is high
+  while (digitalRead(pin));                      // Loops while voltage is high
   time = micros() - time;  // Calculate decay time
   return time > 150;       // Return decay time
 }
